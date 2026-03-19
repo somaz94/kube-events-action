@@ -202,6 +202,99 @@ Or use `has-warnings` output to control your workflow:
 
 <br/>
 
+## Combined Usage with kube-diff-action
+
+Use [kube-diff-action](https://github.com/somaz94/kube-diff-action) to detect manifest drift and `kube-events-action` to check cluster warnings — all in one workflow.
+
+### Post-deploy validation
+
+```yaml
+name: Deploy & Validate
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-and-validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check drift before deploy
+        id: diff
+        uses: somaz94/kube-diff-action@v1
+        with:
+          source: file
+          path: ./manifests/
+          namespace: production
+          output: markdown
+          comment: 'false'
+
+      - name: Deploy manifests
+        if: steps.diff.outputs.has-changes == 'true'
+        run: kubectl apply -f ./manifests/
+
+      - name: Check cluster events after deploy
+        id: events
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: production
+          type: Warning
+          since: 5m
+          threshold: '3'
+          comment: 'true'
+
+      - name: Summary
+        run: |
+          echo "Drift detected: ${{ steps.diff.outputs.has-changes }}"
+          echo "Warnings after deploy: ${{ steps.events.outputs.warning-count }}"
+```
+
+### Scheduled cluster health check
+
+```yaml
+name: Cluster Health Check
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check manifest drift
+        id: diff
+        uses: somaz94/kube-diff-action@v1
+        with:
+          source: kustomize
+          path: ./overlays/production/
+          output: json
+          comment: 'false'
+
+      - name: Check cluster warnings
+        id: events
+        uses: somaz94/kube-events-action@v1
+        with:
+          all-namespaces: 'true'
+          type: Warning
+          since: 6h
+          output: json
+          comment: 'false'
+
+      - name: Notify on issues
+        if: steps.diff.outputs.has-changes == 'true' || steps.events.outputs.has-warnings == 'true'
+        run: |
+          curl -X POST "${{ secrets.SLACK_WEBHOOK }}" \
+            -d "{\"text\": \"🔍 Cluster issues detected\nDrift: ${{ steps.diff.outputs.has-changes }}\nWarnings: ${{ steps.events.outputs.warning-count }}\"}"
+```
+
+<br/>
+
 ## License
 
 This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.
