@@ -15,6 +15,7 @@ A GitHub Action that checks Kubernetes cluster events using [kube-events](https:
 - Check cluster events after deployment with **warning threshold**
 - Auto-post event reports as **PR comments** (updates existing comment on re-run)
 - Multiple output formats: `color`, `plain`, `json`, `markdown`, `table`
+- Group events by **resource**, **namespace**, **kind**, or **reason**
 - Filter by **namespace**, **kind**, **name**, **type**, and **reason**
 - Configurable time window with `since`
 - Fail CI when warning count exceeds threshold
@@ -100,6 +101,29 @@ jobs:
     summary-only: 'true'
 ```
 
+### Group events by namespace
+
+```yaml
+- uses: somaz94/kube-events-action@v1
+  with:
+    all-namespaces: 'true'
+    group-by: namespace
+    type: Warning
+    since: 10m
+```
+
+### Group events by reason
+
+```yaml
+- uses: somaz94/kube-events-action@v1
+  with:
+    namespace: production
+    group-by: reason
+    since: 10m
+    output: table
+    comment: 'false'
+```
+
 ### JSON output for downstream processing
 
 ```yaml
@@ -156,6 +180,7 @@ jobs:
 | `type` | Filter by event type: `Normal`, `Warning` | No | all |
 | `reason` | Filter by event reason (comma-separated) | No | all |
 | `since` | Show events newer than duration (e.g., `5m`, `1h`) | No | `10m` |
+| `group-by` | Group events by: `resource`, `namespace`, `kind`, `reason` | No | `resource` |
 | `output` | Output format: `color`, `plain`, `json`, `markdown`, `table` | No | `markdown` |
 | `summary-only` | Show summary statistics only | No | `false` |
 | `all-namespaces` | Show events from all namespaces | No | `false` |
