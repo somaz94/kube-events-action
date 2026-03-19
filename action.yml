@@ -1,0 +1,107 @@
+name: kube-events Action
+description: Check Kubernetes cluster events and report warnings in CI/CD pipelines
+author: somaz94
+
+branding:
+  icon: activity
+  color: orange
+
+inputs:
+  namespace:
+    description: 'Filter by namespace (comma-separated)'
+    required: false
+    default: ''
+  kind:
+    description: 'Filter by involved object kind (comma-separated, e.g., Pod,Deployment)'
+    required: false
+    default: ''
+  name:
+    description: 'Filter by involved object name (comma-separated)'
+    required: false
+    default: ''
+  type:
+    description: 'Filter by event type: Normal, Warning'
+    required: false
+    default: ''
+  reason:
+    description: 'Filter by event reason (comma-separated, e.g., BackOff,Unhealthy)'
+    required: false
+    default: ''
+  since:
+    description: 'Show events newer than relative duration (e.g., 5m, 1h, 24h)'
+    required: false
+    default: '10m'
+  output:
+    description: 'Output format: color, plain, json, markdown, table'
+    required: false
+    default: 'markdown'
+  summary-only:
+    description: 'Show summary statistics only'
+    required: false
+    default: 'false'
+  all-namespaces:
+    description: 'Show events from all namespaces'
+    required: false
+    default: 'false'
+  threshold:
+    description: 'Fail if warning count exceeds this threshold (0 = do not fail)'
+    required: false
+    default: '0'
+  comment:
+    description: 'Post event report as PR comment'
+    required: false
+    default: 'true'
+  version:
+    description: 'kube-events version to install (e.g., v0.1.0). Default: latest'
+    required: false
+    default: 'latest'
+  token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: 'Event report output text'
+    value: ${{ steps.events.outputs.result }}
+  warning-count:
+    description: 'Number of warning events detected'
+    value: ${{ steps.events.outputs.warning-count }}
+  has-warnings:
+    description: 'Whether warning events were detected (true/false)'
+    value: ${{ steps.events.outputs.has-warnings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install kube-events
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: ${{ github.action_path }}/scripts/install.sh
+
+    - name: Run kube-events
+      id: events
+      shell: bash
+      env:
+        INPUT_NAMESPACE: ${{ inputs.namespace }}
+        INPUT_KIND: ${{ inputs.kind }}
+        INPUT_NAME: ${{ inputs.name }}
+        INPUT_TYPE: ${{ inputs.type }}
+        INPUT_REASON: ${{ inputs.reason }}
+        INPUT_SINCE: ${{ inputs.since }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_SUMMARY_ONLY: ${{ inputs.summary-only }}
+        INPUT_ALL_NAMESPACES: ${{ inputs.all-namespaces }}
+        INPUT_THRESHOLD: ${{ inputs.threshold }}
+      run: ${{ github.action_path }}/scripts/run.sh
+
+    - name: Comment on PR
+      if: inputs.comment == 'true' && github.event_name == 'pull_request' && steps.events.outputs.result != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        EVENTS_RESULT: ${{ steps.events.outputs.result }}
+        HAS_WARNINGS: ${{ steps.events.outputs.has-warnings }}
+        WARNING_COUNT: ${{ steps.events.outputs.warning-count }}
+      run: ${{ github.action_path }}/scripts/comment.sh

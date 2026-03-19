@@ -1,0 +1,251 @@
+name: Smoke Test (Released Action)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: 'workflow run'
+        required: true
+        default: 'true'
+  workflow_run:
+    workflows: ["Create release"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test-basic:
+    name: Smoke Test (basic)
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Deploy test pod
+        run: |
+          kubectl create namespace smoke-test
+          kubectl apply -f - <<'YAML'
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: test-pod
+            namespace: smoke-test
+          spec:
+            containers:
+              - name: nginx
+                image: nginx:1.27
+          YAML
+          kubectl wait --for=condition=ready pod/test-pod -n smoke-test --timeout=60s
+
+      - name: Run kube-events action
+        id: events
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-test
+          since: 5m
+          output: markdown
+          comment: 'false'
+
+      - name: Verify outputs
+        run: |
+          echo "Warning count: ${{ steps.events.outputs.warning-count }}"
+          echo "Has warnings: ${{ steps.events.outputs.has-warnings }}"
+          echo "Result: ${{ steps.events.outputs.result }}"
+          echo "[PASS] Basic smoke test passed"
+
+  smoke-test-warnings:
+    name: Smoke Test (warnings)
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Deploy bad pod
+        run: |
+          kubectl create namespace smoke-warn
+          kubectl apply -f - <<'YAML'
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: bad-image
+            namespace: smoke-warn
+          spec:
+            containers:
+              - name: app
+                image: nginx:this-tag-does-not-exist-999
+          YAML
+          sleep 15
+
+      - name: Run kube-events action (warnings)
+        id: events
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-warn
+          type: Warning
+          since: 5m
+          output: json
+          comment: 'false'
+
+      - name: Verify outputs
+        run: |
+          echo "Warning count: ${{ steps.events.outputs.warning-count }}"
+          echo "Has warnings: ${{ steps.events.outputs.has-warnings }}"
+          echo "[PASS] Warnings smoke test passed"
+
+  smoke-test-filters:
+    name: Smoke Test (filter options)
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Deploy test resources
+        run: |
+          kubectl create namespace smoke-filter
+          kubectl apply -f - <<'YAML'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: web-app
+            namespace: smoke-filter
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: web
+            template:
+              metadata:
+                labels:
+                  app: web
+              spec:
+                containers:
+                  - name: web
+                    image: nginx:1.27
+          YAML
+          kubectl wait --for=condition=available deploy/web-app -n smoke-filter --timeout=60s
+
+      - name: Test kind filter
+        id: kind-filter
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-filter
+          kind: Pod
+          since: 5m
+          output: plain
+          comment: 'false'
+
+      - name: Test name filter
+        id: name-filter
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-filter
+          name: web-app
+          since: 5m
+          output: plain
+          comment: 'false'
+
+      - name: Test summary-only
+        id: summary-only
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-filter
+          summary-only: 'true'
+          since: 5m
+          output: plain
+          comment: 'false'
+
+      - name: Verify outputs
+        run: |
+          echo "=== Kind filter ==="
+          echo "Warning count: ${{ steps.kind-filter.outputs.warning-count }}"
+          echo "=== Name filter ==="
+          echo "Warning count: ${{ steps.name-filter.outputs.warning-count }}"
+          echo "=== Summary only ==="
+          echo "Result: ${{ steps.summary-only.outputs.result }}"
+          echo "[PASS] Filter options smoke test passed"
+
+  smoke-test-formats:
+    name: Smoke Test (output formats)
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Deploy test pod
+        run: |
+          kubectl create namespace smoke-fmt
+          kubectl apply -f - <<'YAML'
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: fmt-pod
+            namespace: smoke-fmt
+          spec:
+            containers:
+              - name: nginx
+                image: nginx:1.27
+          YAML
+          kubectl wait --for=condition=ready pod/fmt-pod -n smoke-fmt --timeout=60s
+
+      - name: Test table output
+        id: table
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-fmt
+          since: 5m
+          output: table
+          comment: 'false'
+
+      - name: Test JSON output
+        id: json
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-fmt
+          since: 5m
+          output: json
+          comment: 'false'
+
+      - name: Test all-namespaces
+        id: all-ns
+        uses: somaz94/kube-events-action@v1
+        with:
+          all-namespaces: 'true'
+          since: 5m
+          output: plain
+          comment: 'false'
+
+      - name: Verify outputs
+        run: |
+          echo "=== Table output ==="
+          echo "Result: ${{ steps.table.outputs.result }}"
+          echo "=== JSON output ==="
+          echo "Warning count: ${{ steps.json.outputs.warning-count }}"
+          echo "=== All namespaces ==="
+          echo "Has warnings: ${{ steps.all-ns.outputs.has-warnings }}"
+          echo "[PASS] Output formats smoke test passed"
