@@ -61,7 +61,7 @@ echo "::endgroup::"
 # Try JSON parsing first, fall back to regex
 WARNING_COUNT=0
 if [[ "${INPUT_OUTPUT}" == "json" ]]; then
-  WARNING_COUNT=$(echo "${RESULT}" | grep -o '"warningCount":[0-9]*' | head -1 | cut -d: -f2 || echo "0")
+  WARNING_COUNT=$(echo "${RESULT}" | grep -oE '"warningCount":\s*[0-9]+' | head -1 | grep -oE '[0-9]+' || echo "0")
 else
   # Parse from summary line: "Warning: N" or "(Warning: N,"
   WARNING_COUNT=$(echo "${RESULT}" | grep -oE 'Warning: [0-9]+' | head -1 | grep -oE '[0-9]+' || echo "0")
