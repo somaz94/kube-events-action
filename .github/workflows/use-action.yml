@@ -184,6 +184,84 @@ jobs:
           echo "Result: ${{ steps.summary-only.outputs.result }}"
           echo "[PASS] Filter options smoke test passed"
 
+  smoke-test-groupby:
+    name: Smoke Test (group-by)
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Deploy test resources
+        run: |
+          kubectl create namespace smoke-groupby
+          kubectl apply -f - <<'YAML'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: web-app
+            namespace: smoke-groupby
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: web
+            template:
+              metadata:
+                labels:
+                  app: web
+              spec:
+                containers:
+                  - name: web
+                    image: nginx:1.27
+          YAML
+          kubectl wait --for=condition=available deploy/web-app -n smoke-groupby --timeout=60s
+
+      - name: Test group-by namespace
+        id: group-ns
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-groupby
+          group-by: namespace
+          since: 5m
+          output: markdown
+          comment: 'false'
+
+      - name: Test group-by kind
+        id: group-kind
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-groupby
+          group-by: kind
+          since: 5m
+          output: table
+          comment: 'false'
+
+      - name: Test group-by reason
+        id: group-reason
+        uses: somaz94/kube-events-action@v1
+        with:
+          namespace: smoke-groupby
+          group-by: reason
+          since: 5m
+          output: json
+          comment: 'false'
+
+      - name: Verify outputs
+        run: |
+          echo "=== Group by namespace ==="
+          echo "Result: ${{ steps.group-ns.outputs.result }}"
+          echo "=== Group by kind ==="
+          echo "Result: ${{ steps.group-kind.outputs.result }}"
+          echo "=== Group by reason ==="
+          echo "Warning count: ${{ steps.group-reason.outputs.warning-count }}"
+          echo "[PASS] Group-by smoke test passed"
+
   smoke-test-formats:
     name: Smoke Test (output formats)
     runs-on: ubuntu-latest
