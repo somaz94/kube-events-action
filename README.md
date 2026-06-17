@@ -187,7 +187,7 @@ jobs:
 | `threshold` | Fail if warning count exceeds this value (0 = do not fail) | No | `0` |
 | `comment` | Post result as PR comment | No | `true` |
 | `version` | kube-events version to install | No | `latest` |
-| `token` | GitHub token for PR comments | No | `${{ github.token }}` |
+| `token` | GitHub token for PR comments and authenticating the version lookup (raises the GitHub API rate limit) | No | `${{ github.token }}` |
 
 <br/>
 
