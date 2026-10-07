@@ -34,7 +34,7 @@ jobs:
         env:
           VERSION: latest
         run: |
-          # sudo strips GITHUB_TOKEN (no -E) -> exercises the unauthenticated fallback path on purpose
+          # No GITHUB_TOKEN in this step's env -> exercises the unauthenticated fallback path on purpose
           sudo bash scripts/install.sh
           kube-events version
 
